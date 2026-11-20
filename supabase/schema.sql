@@ -79,3 +79,15 @@ CREATE POLICY "Yetkililer gruplari gorebilir" ON channel_groups FOR SELECT USING
 CREATE POLICY "Sadece kurucu gruplari yonetir" ON channel_groups FOR ALL USING (get_my_role() = 'founder');
 CREATE POLICY "Ekip icerik planlayabilir" ON scheduled_posts FOR ALL USING (get_my_role() IN ('founder', 'editor'));
 CREATE POLICY "Yetkililer analizleri gorebilir" ON daily_ai_insights FOR SELECT USING (get_my_role() IN ('founder', 'editor'));
+
+-- 6. Rol Yetkileri (service_role ve authenticated için tablo izinleri)
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.authorized_users TO service_role;
+GRANT ALL ON TABLE public.channel_groups TO service_role;
+GRANT ALL ON TABLE public.scheduled_posts TO service_role;
+GRANT ALL ON TABLE public.daily_ai_insights TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.authorized_users TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.channel_groups TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.scheduled_posts TO authenticated;
+GRANT SELECT ON TABLE public.daily_ai_insights TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_my_role() TO authenticated, service_role;
