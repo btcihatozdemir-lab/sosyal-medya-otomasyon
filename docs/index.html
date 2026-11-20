@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Sosyal Medya Komuta Merkezi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+
+  <!-- ==================== 1. YETKİLİ GİRİŞ EKRANI ==================== -->
+  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-8 text-center space-y-6 shadow-2xl">
+      <div>
+        <div class="inline-block bg-emerald-950 border border-emerald-800 text-emerald-400 text-xs font-semibold px-3 py-1 rounded-full mb-3">
+          AI Destekli Kapalı Ekip Paneli
+        </div>
+        <h1 class="text-2xl font-bold text-white">Sosyal Medya Komuta Merkezi</h1>
+        <p class="text-xs text-slate-400 mt-2">Devam etmek için yetkili Google hesabınızla oturum açın.</p>
+      </div>
+      <button onclick="loginWithGoogle()" class="w-full bg-white text-slate-900 hover:bg-slate-200 font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition shadow-lg">
+        <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-5 h-5" alt="Google" />
+        <span>Google Hesabı ile Giriş Yap</span>
+      </button>
+      <p id="auth-status-msg" class="text-xs text-slate-400">Oturum kontrol ediliyor...</p>
+    </div>
+  </div>
+
+  <!-- ==================== 2. ANA PANEL ==================== -->
+  <div id="main-app" class="hidden">
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-20">
+      <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h1 class="text-xl font-bold text-emerald-400">AI Sosyal Medya Komuta Merkezi</h1>
+          <p class="text-xs text-slate-400" id="user-badge-info">Yükleniyor...</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="switchTab('planner')" id="tab-btn-planner" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium">📅 İçerik Planlama</button>
+          <button onclick="switchTab('groups')" id="tab-btn-groups" class="hidden bg-slate-900 text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium">⚙️ Kanal Grupları & API</button>
+          <button onclick="switchTab('team')" id="tab-btn-team" class="hidden bg-slate-900 text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium">👥 Ekip Yönetimi</button>
+          <button onclick="triggerGitHubAction()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-medium">⚡ Şimdi Çalıştır</button>
+          <button onclick="logoutUser()" class="bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-400 px-3 py-2 rounded-lg text-xs">Çıkış</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+      <!-- ==================== SEKME 1: İÇERİK PLANLAMA & AI KOÇ ==================== -->
+      <div id="view-planner" class="space-y-8">
+
+        <!-- GÜNLÜK AI SAYFA KOÇU, TRENDLER VE STOK ALARMI -->
+        <section id="ai-insights-section" class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="text-lg font-bold text-white">🧠 Günlük AI Sayfa Analizi & Size Özel Trend Önerileri</h2>
+            <span class="text-xs text-slate-400">Her sabah 09:00'da güncellenir ve mail atılır</span>
+          </div>
+          <div id="ai-insights-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-sm text-slate-400">
+              Henüz günlük AI analizi oluşmadı. Sabah 09:00'da otomatik çalışacak veya GitHub Actions üzerinden <code>ai_advisor.py</code> tetiklenebilir.
+            </div>
+          </div>
+        </section>
+
+        <!-- TOPLU İÇERİK PLANLAMA -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+          <div class="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <h2 class="text-lg font-semibold">📂 Akıllı Toplu İçerik Planlama (Drive Kuyruğu)</h2>
+              <p class="text-xs text-slate-400">Aynı isimdeki <code>.jpg</code> dosyaları otomatik YouTube Thumbnail olarak eşleşir. Format hataları önceden denetlenir.</p>
+            </div>
+            <div class="flex flex-wrap items-end gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <button onclick="scanAllGroupFolders()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 rounded-lg text-sm font-medium">
+                🔄 Klasörleri Tara & Denetle
+              </button>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">İlk Yayın Tarihi</label>
+                <input type="datetime-local" id="bulk-start-date" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-sm" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Dağıtım Modu</label>
+                <select id="bulk-interval" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm">
+                  <option value="24">Her Gün (Aynı Saat)</option>
+                  <option value="prime">🔥 Prime Time (12:30 / 18:30 / 21:00)</option>
+                  <option value="12">12 Saatte 1 İçerik</option>
+                  <option value="48">2 Günde 1 İçerik</option>
+                </select>
+              </div>
+              <button onclick="autoDistributeDates()" class="bg-sky-600 hover:bg-sky-500 px-3 py-1.5 rounded-lg text-sm font-medium">
+                Tarihleri Dağıt
+              </button>
+            </div>
+          </div>
+
+          <div id="unscheduled-list" class="space-y-4">
+            <p class="text-sm text-slate-500 text-center py-6">Yeni dosyaları görmek için "Klasörleri Tara & Denetle" butonuna basın.</p>
+          </div>
+
+          <div id="bulk-save-footer" class="hidden flex justify-end pt-4 border-t border-slate-800">
+            <button onclick="saveBulkPosts()" class="bg-emerald-600 hover:bg-emerald-500 px-6 py-2.5 rounded-xl font-semibold text-sm shadow-lg">
+              ✅ Seçili İçerikleri Kuyruğa Ekle
+            </button>
+          </div>
+        </section>
+
+        <!-- CANLI YAYIN TAKVİMİ -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold">📊 Yayın Takvimi & Durum</h2>
+            <button onclick="loadAllData()" class="text-xs text-slate-400 hover:text-white">Yenile ↻</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-slate-800 text-slate-400 text-xs uppercase">
+                <tr>
+                  <th class="py-3 px-2">Marka / Dosya</th>
+                  <th class="py-3 px-2">Başlık & Format</th>
+                  <th class="py-3 px-2">Platform Durumu</th>
+                  <th class="py-3 px-2">Planlanan Zaman</th>
+                  <th class="py-3 px-2 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="posts-table-body" class="divide-y divide-slate-800/60"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== SEKME 2: KANAL GRUPLARI (SADECE FOUNDER) ==================== -->
+      <div id="view-groups" class="hidden space-y-6">
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 class="text-lg font-semibold">➕ Yeni Marka / Kanal Grubu Oluştur</h2>
+            <p class="text-xs text-slate-400">Grup oluşturulduğunda Drive klasörü otomatik açılır; AI koçluk ve trend mailleri bu grubun nişine ve sorumlusuna göre gönderilir.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input type="text" id="new-group-name" placeholder="Grup Adı (Örn: Marka A)" class="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm" />
+            <input type="text" id="new-group-niche" placeholder="Niş Etiketleri (yapay zeka, eğitim)" class="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm" />
+            <input type="email" id="new-group-manager" placeholder="Sorumlu Ekip Maili (opsiyonel)" class="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm" />
+            <button onclick="createNewGroup()" id="btn-create-group" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-2 rounded-xl text-sm font-semibold">
+              Grubu & Klasörü Aç
+            </button>
+          </div>
+        </section>
+
+        <section id="groups-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6"></section>
+      </div>
+
+      <!-- ==================== SEKME 3: EKİP YÖNETİMİ (SADECE FOUNDER) ==================== -->
+      <div id="view-team" class="hidden space-y-6">
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl">
+          <h2 class="text-lg font-semibold mb-1">👥 Ekip Arkadaşı Yetkilendir</h2>
+          <p class="text-xs text-slate-400 mb-4">Eklenen Gmail sahipleri Google ile giriş yapıp içerik planlayabilir ve yönettikleri sayfaların AI raporlarını görebilir.</p>
+          <div class="flex gap-3">
+            <input type="email" id="new-member-email" placeholder="ekiparkadasim@gmail.com" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm" />
+            <button onclick="addTeamMember()" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-2 rounded-xl text-sm font-semibold">Yetki Ver</button>
+          </div>
+          <div id="team-list" class="mt-6 divide-y divide-slate-800"></div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Instagram Sayfa Seçim Modalı -->
+  <div id="ig-modal" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4">
+      <h3 class="text-lg font-bold">Instagram İşletme Hesabı Seçin</h3>
+      <div id="ig-pages-list" class="space-y-2"></div>
+      <button onclick="document.getElementById('ig-modal').classList.add('hidden')" class="w-full bg-slate-800 py-2 rounded-lg text-sm">İptal</button>
+    </div>
+  </div>
+
+  <script>
+    // ================= YAPILANDIRMA ALANI =================
+    const CONFIG = {
+      SUPABASE_URL: "https://ldsipoohsxokhwpamizf.supabase.co",
+      SUPABASE_ANON_KEY: "sb_publishable_8j10TRb2ktdLDCdjU8kQgw_FqFOiCp2",
+      GOOGLE_API_KEY: "AIzaSyDaf_z4G0Qp5n1F142l_wTU2if1kYZLyd4",
+      GOOGLE_CLIENT_ID: "500760488018-720i2eu9v83g78nrodu6dta9u5ba5rvc.apps.googleusercontent.com",
+      META_APP_ID: "1843306173582296",
+      GEMINI_API_KEY: "AQ.Ab8RN6ITN4UrHHf5aHA8jtPnp3y6MDiZill2fiNyLHbMqoK-pg", // AI Metin & Tag Asistanı için
+      REDIRECT_URI: window.location.origin + window.location.pathname,
+      GITHUB_REPO: "btcihatozdemir-lab/sosyal-medya-otomasyon",
+      GITHUB_PAT: "" // Opsiyonel: Panelden manuel tetikleme için fine-grained GitHub Token
+    };
+    // ======================================================
+
+    const db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    let currentUserEmail = null;
+    let currentUserRole = null;
+    let channelGroups = [];
+    let existingFileIds = new Set();
+    let scannedQueue = [];
+
+    async function loginWithGoogle() {
+      await db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: CONFIG.REDIRECT_URI } });
+    }
+
+    async function logoutUser() {
+      await db.auth.signOut();
+      window.location.reload();
+    }
+
+    async function initializeAuthAndApp() {
+      const statusMsg = document.getElementById('auth-status-msg');
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) { statusMsg.innerText = "Giriş bekleniyor."; return; }
+
+      const email = session.user.email;
+      const { data: authRecord, error } = await db.from('authorized_users').select('role').eq('email', email).single();
+
+      if (error || !authRecord) {
+        await db.auth.signOut();
+        statusMsg.className = "text-xs text-rose-400 font-semibold";
+        statusMsg.innerText = `⛔ Erişim Reddedildi: (${email}) yetkili listesinde bulunmuyor.`;
+        return;
+      }
+
+      currentUserEmail = email;
+      currentUserRole = authRecord.role;
+
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('main-app').classList.remove('hidden');
+      document.getElementById('user-badge-info').innerText = `${email} • ${currentUserRole === 'founder' ? '👑 Kurucu' : '✍️ Ekip Üyesi'}`;
+
+      if (currentUserRole === 'founder') {
+        document.getElementById('tab-btn-groups').classList.remove('hidden');
+        document.getElementById('tab-btn-team').classList.remove('hidden');
+        await loadTeamMembers();
+      }
+
+      await loadAllData();
+      await handleChannelOAuthCallback();
+    }
+
+    function switchTab(tab) {
+      ['planner', 'groups', 'team'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        if (btn) {
+          btn.className = t === tab
+            ? 'bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium'
+            : (t !== 'planner' && currentUserRole !== 'founder' ? 'hidden' : 'bg-slate-900 text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm font-medium');
+        }
+      });
+    }
+
+    async function callEdgeFunction(payload) {
+      const { data: { session } } = await db.auth.getSession();
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/brand-manager`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': CONFIG.SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Edge Function hatası");
+      return data;
+    }
+
+    async function loadAllData() {
+      const { data: groups } = await db.from('channel_groups').select('*').order('created_at');
+      channelGroups = groups || [];
+      if (currentUserRole === 'founder') renderGroups();
+
+      // Günlük AI Koç & Trend Önerilerini Yükle (Kişinin kendi sorumlu olduğu sayfalar + Founder için tümü)
+      const { data: insights } = await db.from('daily_ai_insights').select('*, channel_groups(group_name, manager_email)').order('report_date', { ascending: false }).limit(6);
+      renderAiInsights(insights || []);
+
+      const { data: posts } = await db.from('scheduled_posts').select('*, channel_groups(group_name)').order('scheduled_at', { ascending: false });
+      existingFileIds = new Set((posts || []).map(p => p.drive_file_id));
+
+      const tbody = document.getElementById('posts-table-body');
+      tbody.innerHTML = '';
+
+      (posts || []).forEach(p => {
+        const logs = p.progress_logs || {};
+        const groupName = p.channel_groups?.group_name || p.folder_name;
+        const canDelete = p.status === 'pending' || p.status === 'partial';
+
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-800/30">
+            <td class="py-3 px-2">
+              <div class="text-xs font-bold text-indigo-400">${groupName}</div>
+              <div class="text-xs text-slate-300">${p.file_name} ${p.thumbnail_file_id ? '🖼️' : ''}</div>
+            </td>
+            <td class="py-3 px-2">
+              <div class="font-medium">${p.title}</div>
+              <div class="text-[11px] text-slate-400">YT: ${p.yt_format} | IG: ${p.ig_format}</div>
+            </td>
+            <td class="py-3 px-2 space-x-2 text-xs">
+              <span class="px-2 py-1 rounded border ${logs.yt === 'done' ? 'bg-emerald-950 border-emerald-700 text-emerald-300' : 'bg-slate-800 border-slate-700'}">YT: ${logs.yt || 'bekliyor'}</span>
+              <span class="px-2 py-1 rounded border ${logs.ig === 'done' ? 'bg-emerald-950 border-emerald-700 text-emerald-300' : 'bg-slate-800 border-slate-700'}">IG: ${logs.ig || 'bekliyor'}</span>
+            </td>
+            <td class="py-3 px-2 text-xs">${new Date(p.scheduled_at).toLocaleString('tr-TR')}</td>
+            <td class="py-3 px-2 text-right">
+              ${canDelete ? `<button onclick="deleteScheduledPost('${p.id}')" class="text-xs text-rose-400 hover:underline">İptal Et</button>` : `<span class="text-xs text-slate-500">${p.status}</span>`}
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function renderAiInsights(insights) {
+      const grid = document.getElementById('ai-insights-grid');
+      const filtered = currentUserRole === 'founder'
+        ? insights
+        : insights.filter(i => i.channel_groups?.manager_email === currentUserEmail);
+
+      if (filtered.length === 0) return;
+      grid.innerHTML = '';
+
+      filtered.forEach(item => {
+        const stockHtml = item.low_stock_alert
+          ? `<div class="bg-rose-950/70 border border-rose-700 text-rose-300 text-xs p-2.5 rounded-xl mb-3">🚨 <strong>Stok Uyarısı:</strong> Bu grubun kuyruğunda 2 günden az içerik kaldı!</div>`
+          : '';
+
+        const warnings = (item.coach_warnings || []).map(w => `<li class="text-xs text-amber-200/90">⚠️ ${w}</li>`).join('');
+        const ideas = (item.trend_ideas || []).map(idea => `
+          <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1">
+            <div class="flex justify-between items-start gap-2">
+              <span class="text-xs font-bold text-emerald-400">🎬 ${idea.title}</span>
+              <span class="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded">${idea.format}</span>
+            </div>
+            <p class="text-[11px] text-slate-300"><strong>3 Sn Kanca:</strong> "${idea.hook}"</p>
+          </div>
+        `).join('');
+
+        grid.innerHTML += `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+              <h3 class="font-bold text-white">${item.channel_groups?.group_name || 'Marka Grubu'}</h3>
+              <span class="text-[11px] text-slate-400">${item.report_date}</span>
+            </div>
+            ${stockHtml}
+            <div>
+              <div class="text-xs font-semibold text-rose-400 mb-1.5">🔍 Sayfa Düzenleme & Performans Uyarıları</div>
+              <ul class="space-y-1.5">${warnings}</ul>
+            </div>
+            <div>
+              <div class="text-xs font-semibold text-emerald-400 mb-1.5">🔥 Bugünün Trend İçerik Önerileri</div>
+              <div class="space-y-2">${ideas}</div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // ÖN-UÇUŞ DENETÇİSİ + THUMBNAIL EŞLEŞTİRME + KLASÖR TARAMA
+    async function scanAllGroupFolders() {
+      const container = document.getElementById('unscheduled-list');
+      container.innerHTML = '<p class="text-sm text-sky-400 text-center py-6">Grup klasörleri taranıyor ve dosyalar denetleniyor...</p>';
+      scannedQueue = [];
+
+      for (const group of channelGroups) {
+        const q = encodeURIComponent(`'${group.drive_folder_id}' in parents and (mimeType contains 'video/' or mimeType contains 'image/') and trashed = false`);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=name&fields=files(id,name,mimeType,size)&key=${CONFIG.GOOGLE_API_KEY}`).then(r => r.json());
+        const files = res.files || [];
+
+        // Aynı isimdeki .jpg dosyalarını YouTube Thumbnail olarak haritala
+        const thumbMap = {};
+        files.forEach(f => {
+          if (f.mimeType === 'image/jpeg' || f.name.toLowerCase().endsWith('.jpg')) {
+            const base = f.name.replace(/\.[^/.]+$/, "").toLowerCase();
+            thumbMap[base] = f.id;
+          }
+        });
+
+        files.forEach(file => {
+          if (existingFileIds.has(file.id)) return;
+          const isVideo = file.mimeType.startsWith('video/');
+          const baseName = file.name.replace(/\.[^/.]+$/, "").toLowerCase();
+
+          // Eğer bu dosya bir videonun kapağı (thumbnail) ise ayrı bir gönderi olarak listeleme
+          const hasMatchingVideo = !isVideo && files.some(v => v.mimeType.startsWith('video/') && v.name.replace(/\.[^/.]+$/, "").toLowerCase() === baseName);
+          if (hasMatchingVideo) return;
+
+          // Ön-Uçuş (Pre-Flight) Hata Denetimi
+          const warnings = [];
+          const sizeMB = file.size ? (parseInt(file.size, 10) / (1024 * 1024)) : 0;
+          if (!isVideo && file.mimeType !== 'image/jpeg') {
+            warnings.push("⚠️ Instagram sadece JPEG kabul eder (PNG hata verir)");
+          }
+          if (isVideo && sizeMB > 95) {
+            warnings.push(`⚠️ Dosya boyutu yüksek (${sizeMB.toFixed(1)} MB)`);
+          }
+
+          scannedQueue.push({
+            group,
+            file_id: file.id,
+            file_name: file.name,
+            media_type: isVideo ? 'video' : 'image',
+            thumbnail_file_id: isVideo ? (thumbMap[baseName] || null) : null,
+            warnings
+          });
+        });
+      }
+
+      if (scannedQueue.length === 0) {
+        container.innerHTML = '<p class="text-sm text-slate-500 text-center py-6">Planlanmamış yeni dosya bulunamadı.</p>';
+        document.getElementById('bulk-save-footer').classList.add('hidden');
+        return;
+      }
+
+      container.innerHTML = '';
+      document.getElementById('bulk-save-footer').classList.remove('hidden');
+
+      scannedQueue.forEach((item, i) => {
+        const cleanTitle = item.file_name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+        const isVid = item.media_type === 'video';
+        const warningBadges = item.warnings.map(w => `<div class="text-[11px] bg-rose-950 border border-rose-800 text-rose-300 px-2 py-0.5 rounded mt-1">${w}</div>`).join('');
+
+        container.innerHTML += `
+          <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl grid grid-cols-1 lg:grid-cols-12 gap-4 items-start queue-row" data-idx="${i}">
+            <!-- Dosya & Uyarılar -->
+            <div class="lg:col-span-3 space-y-1">
+              <span class="text-xs font-bold bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded">${item.group.group_name}</span>
+              <div class="text-sm font-medium break-all">${item.file_name}</div>
+              ${item.thumbnail_file_id ? '<div class="text-[11px] text-emerald-400">🖼️ Özel YT Kapak Fotoğrafı Eşleşti</div>' : ''}
+              ${warningBadges}
+              <div class="pt-2 grid grid-cols-2 gap-1.5">
+                <div>
+                  <label class="block text-[10px] text-slate-400">YouTube Format</label>
+                  <select class="q-yt-fmt w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs">
+                    ${isVid && item.group.yt_connected ? '<option value="shorts">Shorts</option><option value="video">Normal Video</option>' : ''}
+                    <option value="none" ${!isVid || !item.group.yt_connected ? 'selected' : ''}>Yükleme</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-400">Instagram Format</label>
+                  <select class="q-ig-fmt w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs">
+                    ${isVid && item.group.ig_connected ? '<option value="reels">Reels</option><option value="post">Video Gönderi</option>' : ''}
+                    ${!isVid && item.group.ig_connected ? '<option value="post">Fotoğraf Gönderi</option>' : ''}
+                    <option value="none" ${!item.group.ig_connected ? 'selected' : ''}>Yükleme</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Başlık, Açıklama, İlk Yorum & AI Asistan -->
+            <div class="lg:col-span-6 space-y-2">
+              <div class="flex gap-2">
+                <input type="text" oninput="updateCounters(${i})" class="q-title-${i} flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm" value="${cleanTitle}" placeholder="Başlık..." />
+                <button onclick="optimizeWithAI(${i})" id="ai-btn-${i}" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">
+                  ✨ AI Optimize Et
+                </button>
+              </div>
+              <div class="text-[10px] text-slate-400 text-right" id="title-cnt-${i}">${cleanTitle.length} / 100 karakter</div>
+
+              <textarea oninput="updateCounters(${i})" class="q-desc-${i} w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs" rows="2" placeholder="Açıklama ve #etiketler (İlk 125 karakter kanca alanıdır)..."></textarea>
+              <div class="text-[10px] text-slate-400 text-right" id="desc-cnt-${i}">0 / 2200 karakter</div>
+
+              <input type="text" class="q-comment-${i} w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1 text-xs" placeholder="💬 İlk Yorum (Video yayınlandığı an otomatik yorum atar - opsiyonel)" />
+            </div>
+
+            <!-- Tarih -->
+            <div class="lg:col-span-3">
+              <label class="block text-[11px] text-slate-400 mb-1">Yayın Zamanı:</label>
+              <input type="datetime-local" class="q-date w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function updateCounters(i) {
+      const tLen = document.querySelector(`.q-title-${i}`).value.length;
+      const dLen = document.querySelector(`.q-desc-${i}`).value.length;
+      const tEl = document.getElementById(`title-cnt-${i}`);
+      tEl.innerText = `${tLen} / 100 karakter`;
+      tEl.className = tLen > 100 ? "text-[10px] text-rose-400 text-right font-bold" : "text-[10px] text-slate-400 text-right";
+      document.getElementById(`desc-cnt-${i}`).innerText = `${dLen} / 2200 karakter`;
+    }
+
+    // TEK TIKLA GEMINI AI BAŞLIK, AÇIKLAMA, TAG VE İLK YORUM ÜRETİCİ
+    async function optimizeWithAI(i) {
+      if (!CONFIG.GEMINI_API_KEY) return alert("CONFIG.GEMINI_API_KEY tanımlı değil.");
+      const item = scannedQueue[i];
+      const currentTitle = document.querySelector(`.q-title-${i}`).value;
+      const btn = document.getElementById(`ai-btn-${i}`);
+      btn.disabled = true;
+      btn.innerText = "✨ Düşünüyor...";
+
+      const prompt = `
+        Sen viral sosyal medya içerik uzmanısın. Aşağıdaki dosya adı ve taslak başlığa göre;
+        Marka Nişi: ${item.group.niche_keywords}
+        Dosya: ${item.file_name} | Taslak: ${currentTitle}
+        
+        1. YouTube için maksimum 70 karakterlik yüksek tıklanma oranlı Türkçe başlık yaz.
+        2. Instagram ve YouTube için ilk cümlesi merak uyandıran (125 karakter kancalı) açıklama ve sonuna 6 adet güncel Türkçe/niş hashtag ekle.
+        3. İzleyiciyi yoruma teşvik edecek samimi bir "İlk Yorum" sorusu yaz.
+
+        SADECE JSON DÖNDÜR: {"title": "...", "description": "...", "first_comment": "..."}
+      `;
+
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        }).then(r => r.json());
+
+        const aiData = JSON.parse(res.candidates[0].content.parts[0].text);
+        document.querySelector(`.q-title-${i}`).value = aiData.title;
+        document.querySelector(`.q-desc-${i}`).value = aiData.description;
+        document.querySelector(`.q-comment-${i}`).value = aiData.first_comment;
+        updateCounters(i);
+      } catch (e) {
+        alert("AI Hatası: " + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "✨ AI Optimize Et";
+      }
+    }
+
+    // PRIME TIME VE STANDART TARİH DAĞITIMI
+    function autoDistributeDates() {
+      const startVal = document.getElementById('bulk-start-date').value;
+      const mode = document.getElementById('bulk-interval').value;
+      if (!startVal) return alert("Lütfen başlangıç tarihi seçin.");
+
+      let current = new Date(startVal);
+      const primeHours = [12, 18, 21]; // 12:30, 18:30, 21:30 Prime Time saatleri
+      let primeIdx = 0;
+
+      document.querySelectorAll('.q-date').forEach(inp => {
+        if (mode === 'prime') {
+          current.setHours(primeHours[primeIdx], 30, 0, 0);
+          const tzOffset = current.getTimezoneOffset() * 60000;
+          inp.value = new Date(current - tzOffset).toISOString().slice(0, 16);
+          primeIdx++;
+          if (primeIdx >= primeHours.length) {
+            primeIdx = 0;
+            current.setDate(current.getDate() + 1);
+          }
+        } else {
+          const hours = parseInt(mode, 10);
+          const tzOffset = current.getTimezoneOffset() * 60000;
+          inp.value = new Date(current - tzOffset).toISOString().slice(0, 16);
+          current = new Date(current.getTime() + hours * 3600000);
+        }
+      });
+    }
+
+    async function saveBulkPosts() {
+      const rows = document.querySelectorAll('.queue-row');
+      const payload = [];
+
+      rows.forEach(row => {
+        const i = row.dataset.idx;
+        const item = scannedQueue[i];
+        const title = document.querySelector(`.q-title-${i}`).value.trim();
+        const description = document.querySelector(`.q-desc-${i}`).value.trim();
+        const firstComment = document.querySelector(`.q-comment-${i}`).value.trim();
+        const ytFmt = row.querySelector('.q-yt-fmt').value;
+        const igFmt = row.querySelector('.q-ig-fmt').value;
+        const dateVal = row.querySelector('.q-date').value;
+
+        if (title && dateVal && (ytFmt !== 'none' || igFmt !== 'none')) {
+          payload.push({
+            drive_file_id: item.file_id,
+            group_id: item.group.id,
+            folder_name: item.group.drive_folder_name,
+            file_name: item.file_name,
+            media_type: item.media_type,
+            yt_format: ytFmt,
+            ig_format: igFmt,
+            thumbnail_file_id: item.thumbnail_file_id,
+            title,
+            description,
+            first_comment: firstComment,
+            scheduled_at: new Date(dateVal).toISOString(),
+            status: 'pending'
+          });
+        }
+      });
+
+      if (payload.length === 0) return alert("Tarihi girilmiş ve en az 1 formatı seçili içerik bulunamadı.");
+      const { error } = await db.from('scheduled_posts').insert(payload);
+      if (error) alert("Kayıt Hatası: " + error.message);
+      else {
+        alert(`✅ ${payload.length} içerik kuyruğa eklendi!`);
+        await loadAllData();
+        await scanAllGroupFolders();
+      }
+    }
+
+    async function deleteScheduledPost(postId) {
+      if (!confirm("Bu planlamayı iptal etmek istiyor musunuz?")) return;
+      await db.from('scheduled_posts').delete().eq('id', postId);
+      await loadAllData();
+    }
+
+    // GRUP & EKİP YÖNETİMİ FONKSİYONLARI
+    function renderGroups() {
+      const grid = document.getElementById('groups-grid');
+      grid.innerHTML = '';
+      channelGroups.forEach(g => {
+        grid.innerHTML += `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div class="flex justify-between items-start">
+              <div>
+                <h3 class="text-lg font-bold text-white">${g.group_name}</h3>
+                <p class="text-xs text-slate-400">📁 <code>Siradakiler/${g.drive_folder_name}</code> • 🎯 Niş: ${g.niche_keywords}</p>
+                <p class="text-xs text-slate-500">👤 Sorumlu: ${g.manager_email || 'Kurucu'}</p>
+              </div>
+              <button onclick="deleteGroup('${g.id}', '${g.drive_folder_id}')" class="text-xs text-rose-400 hover:underline">Sil</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl">
+                <div class="text-xs text-slate-400 mb-1">YouTube Kanalı</div>
+                ${g.yt_connected ? `<div class="text-sm font-semibold text-emerald-400 mb-2">✅ ${g.yt_channel_name}</div>` : `<div class="text-sm text-slate-500 mb-2">Bağlı Değil</div>`}
+                <button onclick="startYouTubeOAuth('${g.id}')" class="w-full bg-rose-600 hover:bg-rose-500 py-1.5 rounded-lg text-xs font-medium">${g.yt_connected ? 'Değiştir' : '+ YouTube Bağla'}</button>
+              </div>
+              <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl">
+                <div class="text-xs text-slate-400 mb-1">Instagram Sayfası</div>
+                ${g.ig_connected ? `<div class="text-sm font-semibold text-emerald-400 mb-2">✅ @${g.ig_username}</div>` : `<div class="text-sm text-slate-500 mb-2">Bağlı Değil</div>`}
+                <button onclick="startInstagramOAuth('${g.id}')" class="w-full bg-fuchsia-600 hover:bg-fuchsia-500 py-1.5 rounded-lg text-xs font-medium">${g.ig_connected ? 'Değiştir' : '+ Instagram Bağla'}</button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    async function createNewGroup() {
+      const group_name = document.getElementById('new-group-name').value.trim();
+      const niche_keywords = document.getElementById('new-group-niche').value.trim();
+      const manager_email = document.getElementById('new-group-manager').value.trim();
+      if (!group_name) return;
+      const btn = document.getElementById('btn-create-group');
+      btn.disabled = true; btn.innerText = "Açılıyor...";
+      try {
+        await callEdgeFunction({ action: 'create_group', group_name, niche_keywords, manager_email });
+        document.getElementById('new-group-name').value = '';
+        document.getElementById('new-group-niche').value = '';
+        document.getElementById('new-group-manager').value = '';
+        await loadAllData();
+      } catch (e) { alert("Hata: " + e.message); }
+      finally { btn.disabled = false; btn.innerText = "Grubu & Klasörü Aç"; }
+    }
+
+    async function deleteGroup(groupId, folderId) {
+      if (!confirm("Bu grubu silmek istediğinize emin misiniz?")) return;
+      try {
+        await callEdgeFunction({ action: 'delete_group', group_id: groupId, drive_folder_id: folderId });
+        await loadAllData();
+      } catch (e) { alert("Hata: " + e.message); }
+    }
+
+    function startYouTubeOAuth(groupId) {
+      const state = encodeURIComponent(JSON.stringify({ type: 'channel_yt', groupId }));
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl');
+      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CONFIG.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
+    }
+
+    function startInstagramOAuth(groupId) {
+      const state = encodeURIComponent(JSON.stringify({ type: 'channel_ig', groupId }));
+      const scope = encodeURIComponent('instagram_basic,instagram_content_publish,instagram_manage_comments,pages_show_list,pages_read_engagement,business_management');
+      window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${CONFIG.META_APP_ID}&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}&scope=${scope}&response_type=code&state=${state}`;
+    }
+
+    async function handleChannelOAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const stateRaw = params.get('state');
+      if (!code || !stateRaw) return;
+
+      let stateObj = null;
+      try { stateObj = JSON.parse(decodeURIComponent(stateRaw)); } catch (e) { return; }
+      if (!stateObj || !stateObj.type?.startsWith('channel_')) return;
+
+      window.history.replaceState({}, document.title, CONFIG.REDIRECT_URI);
+
+      if (stateObj.type === 'channel_yt') {
+        try {
+          const res = await callEdgeFunction({ action: 'connect_youtube', group_id: stateObj.groupId, code, redirect_uri: CONFIG.REDIRECT_URI });
+          alert(`✅ YouTube Bağlandı: ${res.channel_name}`);
+          switchTab('groups'); await loadAllData();
+        } catch (e) { alert("YouTube Hatası: " + e.message); }
+      } else if (stateObj.type === 'channel_ig') {
+        try {
+          const res = await callEdgeFunction({ action: 'exchange_instagram_code', code, redirect_uri: CONFIG.REDIRECT_URI });
+          const list = document.getElementById('ig-pages-list');
+          list.innerHTML = '';
+          res.accounts.forEach(acc => {
+            const btn = document.createElement('button');
+            btn.className = "w-full text-left bg-slate-800 hover:bg-slate-700 p-3 rounded-xl text-sm";
+            btn.innerHTML = `<strong>@${acc.ig_username}</strong> <span class="text-xs text-slate-400">(${acc.page_name})</span>`;
+            btn.onclick = async () => {
+              await callEdgeFunction({ action: 'save_instagram_to_group', group_id: stateObj.groupId, ig_username: acc.ig_username, ig_business_id: acc.ig_business_id, access_token: acc.access_token });
+              document.getElementById('ig-modal').classList.add('hidden');
+              alert(`✅ Instagram Bağlandı: @${acc.ig_username}`);
+              switchTab('groups'); await loadAllData();
+            };
+            list.appendChild(btn);
+          });
+          document.getElementById('ig-modal').classList.remove('hidden');
+        } catch (e) { alert("Instagram Hatası: " + e.message); }
+      }
+    }
+
+    async function loadTeamMembers() {
+      const { data } = await db.from('authorized_users').select('*').order('created_at');
+      const list = document.getElementById('team-list');
+      list.innerHTML = '';
+      (data || []).forEach(u => {
+        list.innerHTML += `
+          <div class="py-3 flex justify-between items-center text-sm">
+            <div><span class="font-medium">${u.email}</span> <span class="ml-2 text-xs px-2 py-0.5 rounded bg-slate-800">${u.role.toUpperCase()}</span></div>
+            ${u.role !== 'founder' ? `<button onclick="removeTeamMember('${u.email}')" class="text-xs text-rose-400 hover:underline">Kaldır</button>` : ''}
+          </div>
+        `;
+      });
+    }
+
+    async function addTeamMember() {
+      const email = document.getElementById('new-member-email').value.trim().toLowerCase();
+      if (!email) return;
+      const { error } = await db.from('authorized_users').insert({ email, role: 'editor' });
+      if (error) alert("Hata: " + error.message);
+      else { document.getElementById('new-member-email').value = ''; await loadTeamMembers(); }
+    }
+
+    async function removeTeamMember(email) {
+      if (!confirm(`${email} yetkisini kaldırmak istiyor musunuz?`)) return;
+      await db.from('authorized_users').delete().eq('email', email);
+      await loadTeamMembers();
+    }
+
+    async function triggerGitHubAction() {
+      if (!CONFIG.GITHUB_PAT) return alert("CONFIG.GITHUB_PAT tanımlı değil.");
+      const res = await fetch(`https://api.github.com/repos/${CONFIG.GITHUB_REPO}/actions/workflows/publisher.yml/dispatches`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${CONFIG.GITHUB_PAT}`, 'Accept': 'application/vnd.github+json' },
+        body: JSON.stringify({ ref: 'main' })
+      });
+      if (res.ok) alert("⚡ Motor tetiklendi!");
+    }
+
+    initializeAuthAndApp();
+  </script>
+</body>
+</html>
