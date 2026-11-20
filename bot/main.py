@@ -7,12 +7,12 @@ from youtube_service import upload_to_youtube
 from instagram_service import upload_to_instagram
 
 DB_PATH = "database/accounts.db"
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-GOOGLE_SA_JSON = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-DRIVE_ARCHIVE_ROOT_ID = os.environ["DRIVE_ARCHIVE_ROOT_ID"]
+SUPABASE_URL = os.environ["SUPABASE_URL"].strip()
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"].strip()
+GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"].strip()
+GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"].strip()
+GOOGLE_SA_JSON = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"].strip()
+DRIVE_ARCHIVE_ROOT_ID = os.environ["DRIVE_ARCHIVE_ROOT_ID"].strip()
 
 
 def sync_sqlite_from_supabase(supabase):

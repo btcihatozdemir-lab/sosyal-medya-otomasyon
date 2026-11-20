@@ -11,14 +11,14 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-YOUTUBE_API_KEY = os.environ["GOOGLE_API_KEY"]
-GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-SMTP_EMAIL = os.environ["SMTP_EMAIL"]
-SMTP_APP_PASSWORD = os.environ["SMTP_APP_PASSWORD"]
+SUPABASE_URL = os.environ["SUPABASE_URL"].strip()
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"].strip()
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
+YOUTUBE_API_KEY = os.environ["GOOGLE_API_KEY"].strip()
+GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"].strip()
+GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"].strip()
+SMTP_EMAIL = os.environ["SMTP_EMAIL"].strip()
+SMTP_APP_PASSWORD = os.environ["SMTP_APP_PASSWORD"].strip()
 
 
 def get_turkey_trends():
