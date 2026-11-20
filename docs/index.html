@@ -691,18 +691,25 @@
           const res = await callEdgeFunction({ action: 'exchange_instagram_code', code, redirect_uri: CONFIG.REDIRECT_URI });
           const list = document.getElementById('ig-pages-list');
           list.innerHTML = '';
-          res.accounts.forEach(acc => {
-            const btn = document.createElement('button');
-            btn.className = "w-full text-left bg-slate-800 hover:bg-slate-700 p-3 rounded-xl text-sm";
-            btn.innerHTML = `<strong>@${acc.ig_username}</strong> <span class="text-xs text-slate-400">(${acc.page_name})</span>`;
-            btn.onclick = async () => {
-              await callEdgeFunction({ action: 'save_instagram_to_group', group_id: stateObj.groupId, ig_username: acc.ig_username, ig_business_id: acc.ig_business_id, access_token: acc.access_token });
-              document.getElementById('ig-modal').classList.add('hidden');
-              alert(`✅ Instagram Bağlandı: @${acc.ig_username}`);
-              switchTab('groups'); await loadAllData();
-            };
-            list.appendChild(btn);
-          });
+          if (!res.accounts || res.accounts.length === 0) {
+            const pagesInfo = (res.pages_found && res.pages_found.length > 0)
+              ? `Bulunan Facebook sayfaları: <strong>${res.pages_found.join(', ')}</strong> — ancak bağlı bir Instagram İşletme (Business/Creator) hesabı görünmüyor.`
+              : `Hiç Facebook Sayfası dönmedi. Facebook giriş ekranında "Ayarları düzenle" diyerek sayfanızı ve Instagram hesabınızı işaretlediğinizden emin olun.`;
+            list.innerHTML = `<div class="bg-amber-950/70 border border-amber-700 text-amber-200 p-3 rounded-xl text-xs space-y-1"><div>⚠️ Bağlı Instagram İşletme hesabı bulunamadı.</div><div>${pagesInfo}</div></div>`;
+          } else {
+            res.accounts.forEach(acc => {
+              const btn = document.createElement('button');
+              btn.className = "w-full text-left bg-slate-800 hover:bg-slate-700 p-3 rounded-xl text-sm";
+              btn.innerHTML = `<strong>@${acc.ig_username}</strong> <span class="text-xs text-slate-400">(${acc.page_name})</span>`;
+              btn.onclick = async () => {
+                await callEdgeFunction({ action: 'save_instagram_to_group', group_id: stateObj.groupId, ig_username: acc.ig_username, ig_business_id: acc.ig_business_id, access_token: acc.access_token });
+                document.getElementById('ig-modal').classList.add('hidden');
+                alert(`✅ Instagram Bağlandı: @${acc.ig_username}`);
+                switchTab('groups'); await loadAllData();
+              };
+              list.appendChild(btn);
+            });
+          }
           document.getElementById('ig-modal').classList.remove('hidden');
         } catch (e) { alert("Instagram Hatası: " + e.message); }
       }

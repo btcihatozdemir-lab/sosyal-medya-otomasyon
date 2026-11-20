@@ -155,26 +155,47 @@ serve(async (req) => {
         `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirect_uri)}&client_secret=${appSecret}&code=${code}`
       ).then((r) => r.json());
 
+      if (!shortRes.access_token) {
+        throw new Error("Meta kısa token hatası: " + JSON.stringify(shortRes));
+      }
+
       const longRes = await fetch(
         `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortRes.access_token}`
       ).then((r) => r.json());
 
+      const finalUserToken = longRes.access_token || shortRes.access_token;
+
       const pagesRes = await fetch(
-        `https://graph.facebook.com/v21.0/me/accounts?fields=name,access_token,instagram_business_account{id,username}&access_token=${longRes.access_token}`
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username},connected_instagram_account{id,username}&access_token=${finalUserToken}`
       ).then((r) => r.json());
 
-      const igAccounts = (pagesRes.data || [])
-        .filter((p: any) => p.instagram_business_account)
-        .map((p: any) => ({
-          page_name: p.name,
-          ig_business_id: p.instagram_business_account.id,
-          ig_username: p.instagram_business_account.username || p.name,
-          access_token: p.access_token,
-        }));
+      if (pagesRes.error) {
+        throw new Error("Meta sayfalar hatası: " + JSON.stringify(pagesRes.error));
+      }
 
-      return new Response(JSON.stringify({ success: true, accounts: igAccounts }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const pages = pagesRes.data || [];
+      const igAccounts = pages
+        .filter((p: any) => p.instagram_business_account || p.connected_instagram_account)
+        .map((p: any) => {
+          const ig = p.instagram_business_account || p.connected_instagram_account;
+          return {
+            page_name: p.name,
+            ig_business_id: ig.id,
+            ig_username: ig.username || p.name,
+            access_token: p.access_token,
+          };
+        });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          accounts: igAccounts,
+          pages_found: pages.map((p: any) => p.name),
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     if (action === "save_instagram_to_group") {
