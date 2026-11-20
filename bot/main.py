@@ -19,8 +19,10 @@ def sync_sqlite_from_supabase(supabase):
     os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    # Güvenlik: OAuth refresh_token ve access_token değerleri SQLite dosyasına yazılmaz.
+    c.execute("DROP TABLE IF EXISTS channel_groups")
     c.execute('''
-        CREATE TABLE IF NOT EXISTS channel_groups (
+        CREATE TABLE channel_groups (
             id TEXT PRIMARY KEY,
             group_name TEXT,
             drive_folder_id TEXT,
@@ -28,34 +30,31 @@ def sync_sqlite_from_supabase(supabase):
             niche_keywords TEXT,
             manager_email TEXT,
             yt_channel_name TEXT,
-            yt_refresh_token TEXT,
             yt_connected INTEGER,
             ig_username TEXT,
             ig_business_id TEXT,
-            ig_access_token TEXT,
             ig_connected INTEGER,
             synced_at TEXT
         )
     ''')
 
     groups = supabase.table("channel_groups").select("*").execute().data or []
-    c.execute("DELETE FROM channel_groups")
     now_str = datetime.now(timezone.utc).isoformat()
 
     for g in groups:
         c.execute('''
-            INSERT INTO channel_groups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO channel_groups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             g["id"], g["group_name"], g["drive_folder_id"], g["drive_folder_name"],
             g.get("niche_keywords"), g.get("manager_email"),
-            g.get("yt_channel_name"), g.get("yt_refresh_token"), 1 if g.get("yt_connected") else 0,
-            g.get("ig_username"), g.get("ig_business_id"), g.get("ig_access_token"),
+            g.get("yt_channel_name"), 1 if g.get("yt_connected") else 0,
+            g.get("ig_username"), g.get("ig_business_id"),
             1 if g.get("ig_connected") else 0, now_str
         ))
 
     conn.commit()
     conn.close()
-    print(f"🔄 SQLite kasası senkronize edildi ({len(groups)} marka grubu).")
+    print(f"🔄 SQLite kasası (tokensız/güvenli) senkronize edildi ({len(groups)} marka grubu).")
     return {g["id"]: g for g in groups}
 
 
