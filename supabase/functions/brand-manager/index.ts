@@ -65,8 +65,8 @@ serve(async (req) => {
     if (action === "create_group") {
       const { group_name, niche_keywords, manager_email } = body;
       const folderName = group_name.trim().replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ_-]/g, "_");
-      const driveToken = await getGoogleDriveAccessToken(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!);
-      const queueRootId = Deno.env.get("DRIVE_QUEUE_ROOT_ID")!;
+      const driveToken = await getGoogleDriveAccessToken(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!.trim());
+      const queueRootId = Deno.env.get("DRIVE_QUEUE_ROOT_ID")!.trim();
 
       const driveRes = await fetch("https://www.googleapis.com/drive/v3/files", {
         method: "POST",
@@ -100,7 +100,7 @@ serve(async (req) => {
 
     if (action === "delete_group") {
       const { group_id, drive_folder_id } = body;
-      const driveToken = await getGoogleDriveAccessToken(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!);
+      const driveToken = await getGoogleDriveAccessToken(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!.trim());
       await fetch(`https://www.googleapis.com/drive/v3/files/${drive_folder_id}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${driveToken}`, "Content-Type": "application/json" },
@@ -120,8 +120,8 @@ serve(async (req) => {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           code,
-          client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
-          client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
+          client_id: Deno.env.get("GOOGLE_CLIENT_ID")!.trim(),
+          client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!.trim(),
           redirect_uri,
           grant_type: "authorization_code",
         }),
@@ -148,8 +148,8 @@ serve(async (req) => {
 
     if (action === "exchange_instagram_code") {
       const { code, redirect_uri } = body;
-      const appId = Deno.env.get("META_APP_ID")!;
-      const appSecret = Deno.env.get("META_APP_SECRET")!;
+      const appId = Deno.env.get("META_APP_ID")!.trim();
+      const appSecret = Deno.env.get("META_APP_SECRET")!.trim();
 
       const shortRes = await fetch(
         `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirect_uri)}&client_secret=${appSecret}&code=${code}`
