@@ -109,29 +109,33 @@ def generate_ai_report(group, trends, perf_stats):
     }}
     """
     models = [
-        "gemini-3.8-flash",
-        "gemini-flash-latest",
         "gemini-flash-lite-latest",
-        "gemini-3.5-flash-lite",
+        "gemini-3.7-flash",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
     ]
     last_err = None
     for model_name in models:
-        res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}",
-            headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}},
-            timeout=60,
-        ).json()
-        if "candidates" in res:
-            print(f"🤖 Gemini yanıtı alındı (model: {model_name})")
-            raw_text = res["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if raw_text.startswith("```"):
-                raw_text = raw_text.strip("`")
-                if raw_text.lower().startswith("json"):
-                    raw_text = raw_text[4:].strip()
-            return json.loads(raw_text)
-        last_err = f"{model_name}: {json.dumps(res, ensure_ascii=False)}"
-        print(f"⚠️ {model_name} atlandı -> {res.get('error', {}).get('status') or res}")
+        try:
+            res = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}",
+                headers={"Content-Type": "application/json"},
+                json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}},
+                timeout=35,
+            ).json()
+            if "candidates" in res:
+                print(f"🤖 Gemini yanıtı alındı (model: {model_name})")
+                raw_text = res["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if raw_text.startswith("```"):
+                    raw_text = raw_text.strip("`")
+                    if raw_text.lower().startswith("json"):
+                        raw_text = raw_text[4:].strip()
+                return json.loads(raw_text)
+            last_err = f"{model_name}: {json.dumps(res, ensure_ascii=False)}"
+            print(f"⚠️ {model_name} atlandı -> {res.get('error', {}).get('status') or res}")
+        except Exception as exc:
+            last_err = f"{model_name}: {exc}"
+            print(f"⚠️ {model_name} zaman aşımı/hata -> {exc}")
 
     raise RuntimeError(f"Tüm Gemini modelleri başarısız oldu. Son hata: {last_err}")
 
