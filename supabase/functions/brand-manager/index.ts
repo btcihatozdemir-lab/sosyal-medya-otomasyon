@@ -55,12 +55,60 @@ serve(async (req) => {
       .eq("email", user.email)
       .single();
 
-    if (authRecord?.role !== "founder") {
-      throw new Error("Bu işlem için sadece Kurucu (Founder) yetkilidir.");
+    if (!authRecord?.role || !["founder", "editor"].includes(authRecord.role)) {
+      throw new Error("Bu işlem için yetkili kullanıcı olmanız gerekir.");
     }
 
     const body = await req.json();
     const { action } = body;
+
+    if (action === "optimize_content") {
+      const geminiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
+      if (!geminiKey) throw new Error("GEMINI_API_KEY tanımlı değil.");
+      const { niche_keywords, file_name, current_title } = body;
+      const prompt = `
+        Sen viral sosyal medya içerik uzmanısın. Aşağıdaki dosya adı ve taslak başlığa göre;
+        Marka Nişi: ${niche_keywords || "genel, trend"}
+        Dosya: ${file_name || ""} | Taslak: ${current_title || ""}
+
+        1. YouTube için maksimum 70 karakterlik yüksek tıklanma oranlı Türkçe başlık yaz.
+        2. Instagram ve YouTube için ilk cümlesi merak uyandıran (125 karakter kancalı) açıklama ve sonuna 6 adet güncel Türkçe/niş hashtag ekle.
+        3. İzleyiciyi yoruma teşvik edecek samimi bir "İlk Yorum" sorusu yaz.
+
+        SADECE JSON DÖNDÜR: {"title": "...", "description": "...", "first_comment": "..."}
+      `;
+      const models = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+      let lastErr = "";
+      for (const model of models) {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseMimeType: "application/json" },
+            }),
+          }
+        ).then((r) => r.json());
+        if (res?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          let raw = res.candidates[0].content.parts[0].text.trim();
+          if (raw.startsWith("```")) {
+            raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+          }
+          const aiData = JSON.parse(raw);
+          return new Response(JSON.stringify({ success: true, data: aiData, model }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        lastErr = `${model}: ${JSON.stringify(res)}`;
+      }
+      throw new Error("Gemini API hatası: " + lastErr);
+    }
+
+    if (authRecord.role !== "founder") {
+      throw new Error("Bu işlem için sadece Kurucu (Founder) yetkilidir.");
+    }
 
     if (action === "create_group") {
       const { group_name, niche_keywords, manager_email } = body;

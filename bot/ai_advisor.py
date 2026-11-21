@@ -108,14 +108,32 @@ def generate_ai_report(group, trends, perf_stats):
       ]
     }}
     """
-    res = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}",
-        headers={"Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
-    ).json()
-    if "candidates" not in res:
-        raise RuntimeError(f"Gemini API Hatası: {json.dumps(res, ensure_ascii=False)}")
-    return json.loads(res["candidates"][0]["content"]["parts"][0]["text"])
+    models = [
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+    ]
+    last_err = None
+    for model_name in models:
+        res = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}",
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}},
+            timeout=60,
+        ).json()
+        if "candidates" in res:
+            print(f"🤖 Gemini yanıtı alındı (model: {model_name})")
+            raw_text = res["candidates"][0]["content"]["parts"][0]["text"].strip()
+            if raw_text.startswith("```"):
+                raw_text = raw_text.strip("`")
+                if raw_text.lower().startswith("json"):
+                    raw_text = raw_text[4:].strip()
+            return json.loads(raw_text)
+        last_err = f"{model_name}: {json.dumps(res, ensure_ascii=False)}"
+        print(f"⚠️ {model_name} atlandı -> {res.get('error', {}).get('status') or res}")
+
+    raise RuntimeError(f"Tüm Gemini modelleri başarısız oldu. Son hata: {last_err}")
 
 
 def send_personalized_email(to_emails, group_name, report_data, pending_count):
