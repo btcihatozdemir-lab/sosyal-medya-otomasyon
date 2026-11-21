@@ -175,9 +175,27 @@ def send_personalized_email(to_emails, group_name, report_data, pending_count):
     msg["To"] = ", ".join(set(to_emails))
     msg.attach(MIMEText(html, "html"))
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(SMTP_EMAIL, SMTP_APP_PASSWORD)
-        server.sendmail(SMTP_EMAIL, list(set(to_emails)), msg.as_string())
+    clean_email = SMTP_EMAIL.strip()
+    clean_password = "".join(SMTP_APP_PASSWORD.split())
+    recipient_list = list(set(to_emails))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
+            server.ehlo()
+            server.login(clean_email, clean_password)
+            server.sendmail(clean_email, recipient_list, msg.as_string())
+    except smtplib.SMTPAuthenticationError as auth_err:
+        raise RuntimeError(
+            f"Gmail SMTP kimlik doğrulama hatası (16 haneli Google Uygulama Şifresi gerekir): {auth_err}"
+        ) from auth_err
+    except (smtplib.SMTPServerDisconnected, OSError) as conn_err:
+        print(f"⚠️ Port 465 bağlantısı koptu ({conn_err}), Port 587 (STARTTLS) deneniyor...")
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(clean_email, clean_password)
+            server.sendmail(clean_email, recipient_list, msg.as_string())
 
 
 def run_daily_advisor():
