@@ -113,6 +113,8 @@ def generate_ai_report(group, trends, perf_stats):
         headers={"Content-Type": "application/json"},
         json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
     ).json()
+    if "candidates" not in res:
+        raise RuntimeError(f"Gemini API Hatası: {json.dumps(res, ensure_ascii=False)}")
     return json.loads(res["candidates"][0]["content"]["parts"][0]["text"])
 
 

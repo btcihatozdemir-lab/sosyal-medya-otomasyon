@@ -2,9 +2,15 @@ name: Sosyal Medya Otomasyon ve AI Analiz Motoru
 
 on:
   schedule:
-    - cron: '0 * * * *'    # Her saat başı paylaşım & temizlik kontrolü
-    - cron: '0 6 * * *'    # Her sabah 09:00 TR (06:00 UTC) AI Analiz, Trend Maili & Stok Alarmı
+    - cron: '11 * * * *'   # Her saat :11 geçe paylaşım & temizlik kontrolü (saat başı yoğunluğunu aşar)
+    - cron: '7 6 * * *'    # Her sabah 09:07 TR (06:07 UTC) AI Analiz, Trend Maili & Stok Alarmı
   workflow_dispatch:
+    inputs:
+      run_advisor:
+        description: 'AI Koç ve Trend Mailini hemen test et'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -30,7 +36,7 @@ jobs:
         run: python bot/main.py
 
       - name: Sabah 09:00 AI Koç, Trend Bülteni ve Stok Alarmı
-        if: github.event.schedule == '0 6 * * *'
+        if: github.event.schedule == '7 6 * * *' || inputs.run_advisor == true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
