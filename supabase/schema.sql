@@ -28,17 +28,19 @@ CREATE TABLE channel_groups (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Planlanan İçerikler (Esnek Format + İlk Yorum + Thumbnail)
+-- 3. Planlanan İçerikler (Esnek Format + Carousel + Alt Klasör + İlk Yorum + Thumbnail)
 CREATE TABLE scheduled_posts (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     drive_file_id TEXT UNIQUE NOT NULL,
+    drive_subfolder_id TEXT,
     group_id UUID REFERENCES channel_groups(id) ON DELETE CASCADE,
     folder_name TEXT NOT NULL,
     file_name TEXT NOT NULL,
-    media_type TEXT NOT NULL CHECK (media_type IN ('video', 'image')),
+    media_type TEXT NOT NULL CHECK (media_type IN ('video', 'image', 'carousel')),
     yt_format TEXT DEFAULT 'shorts' CHECK (yt_format IN ('shorts', 'video', 'none')),
-    ig_format TEXT DEFAULT 'reels' CHECK (ig_format IN ('reels', 'post', 'none')),
+    ig_format TEXT DEFAULT 'reels' CHECK (ig_format IN ('reels', 'post', 'carousel', 'none')),
     thumbnail_file_id TEXT,
+    carousel_items JSONB DEFAULT '[]'::jsonb,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
     first_comment TEXT DEFAULT '',

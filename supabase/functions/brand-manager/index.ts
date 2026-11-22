@@ -4,8 +4,36 @@ import { SignJWT, importPKCS8 } from "https://esm.sh/jose@4.14.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
+
+async function dispatchGitHubWorkflow(runAdvisor: boolean) {
+  const ghToken = Deno.env.get("GITHUB_PAT")?.trim();
+  const ghRepo = (Deno.env.get("GITHUB_REPO") || "btcihatozdemir-lab/sosyal-medya-otomasyon").trim();
+  if (!ghToken) throw new Error("Supabase Secrets içinde GITHUB_PAT tanımlı değil.");
+
+  const ghRes = await fetch(
+    `https://api.github.com/repos/${ghRepo}/actions/workflows/publisher.yml/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ghToken}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ref: "main",
+        inputs: { run_advisor: runAdvisor ? "true" : "false" },
+      }),
+    }
+  );
+  if (!ghRes.ok) {
+    const detail = await ghRes.text();
+    throw new Error(`GitHub Actions tetiklenemedi (${ghRes.status}): ${detail}`);
+  }
+  return { triggered: true, run_advisor: runAdvisor };
+}
 
 async function getGoogleDriveAccessToken(saJsonStr: string) {
   const sa = JSON.parse(saJsonStr);
@@ -33,6 +61,19 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const body = await req.json();
+    const { action } = body;
+
+    // Supabase pg_cron (tam 09:00 TR & saatlik paylaşım) doğrudan tetikleme desteği
+    const cronHeader = req.headers.get("x-cron-secret")?.trim();
+    const expectedCronSecret = Deno.env.get("CRON_TRIGGER_SECRET")?.trim();
+    if (cronHeader && expectedCronSecret && cronHeader === expectedCronSecret && action === "trigger_workflow") {
+      const result = await dispatchGitHubWorkflow(Boolean(body.run_advisor));
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -59,8 +100,12 @@ serve(async (req) => {
       throw new Error("Bu işlem için yetkili kullanıcı olmanız gerekir.");
     }
 
-    const body = await req.json();
-    const { action } = body;
+    if (action === "trigger_workflow") {
+      const result = await dispatchGitHubWorkflow(Boolean(body.run_advisor));
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (action === "optimize_content") {
       const geminiKey = Deno.env.get("GEMINI_API_KEY")?.trim();

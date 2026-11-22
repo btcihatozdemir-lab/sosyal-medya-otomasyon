@@ -3,3 +3,4 @@ google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
 supabase>=2.18.0
 requests==2.32.3
+Pillow>=10.0.0

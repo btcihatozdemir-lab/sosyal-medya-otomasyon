@@ -2,7 +2,7 @@ import io
 import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 
 class DriveManager:
@@ -14,6 +14,11 @@ class DriveManager:
         self.service = build('drive', 'v3', credentials=creds)
         self.archive_root_id = archive_root_id
 
+    def get_file_metadata(self, file_id):
+        return self.service.files().get(
+            fileId=file_id, fields='id, name, mimeType'
+        ).execute()
+
     def download_file(self, file_id, destination_path):
         request = self.service.files().get_media(fileId=file_id)
         fh = io.FileIO(destination_path, 'wb')
@@ -23,6 +28,18 @@ class DriveManager:
             _, done = downloader.next_chunk()
         fh.close()
         return destination_path
+
+    def upload_temp_jpeg(self, local_path, file_name):
+        """PNG/WebP'den dönüştürülen geçici JPEG dosyasını Drive'a yükler."""
+        metadata = {
+            'name': file_name,
+            'parents': [self.archive_root_id],
+        }
+        media = MediaFileUpload(local_path, mimetype='image/jpeg', resumable=False)
+        res = self.service.files().create(
+            body=metadata, media_body=media, fields='id'
+        ).execute()
+        return res['id']
 
     def set_public_link(self, file_id):
         permission = {'type': 'anyone', 'role': 'reader'}

@@ -272,7 +272,12 @@
       renderAiInsights(insights || []);
 
       const { data: posts } = await db.from('scheduled_posts').select('*, channel_groups(group_name)').order('scheduled_at', { ascending: false });
-      existingFileIds = new Set((posts || []).map(p => p.drive_file_id));
+      existingFileIds = new Set();
+      (posts || []).forEach(p => {
+        if (p.drive_file_id) existingFileIds.add(p.drive_file_id);
+        if (p.drive_subfolder_id) existingFileIds.add(p.drive_subfolder_id);
+        (p.carousel_items || []).forEach(c => { if (c?.file_id) existingFileIds.add(c.file_id); });
+      });
 
       const tbody = document.getElementById('posts-table-body');
       tbody.innerHTML = '';
@@ -281,12 +286,14 @@
         const logs = p.progress_logs || {};
         const groupName = p.channel_groups?.group_name || p.folder_name;
         const canDelete = p.status === 'pending' || p.status === 'partial';
+        const slideCount = (p.carousel_items || []).length;
+        const typeBadge = p.media_type === 'carousel' ? `🎠 (${slideCount} slayt)` : (p.thumbnail_file_id ? '🖼️' : '');
 
         tbody.innerHTML += `
           <tr class="hover:bg-slate-800/30">
             <td class="py-3 px-2">
               <div class="text-xs font-bold text-indigo-400">${groupName}</div>
-              <div class="text-xs text-slate-300">${p.file_name} ${p.thumbnail_file_id ? '🖼️' : ''}</div>
+              <div class="text-xs text-slate-300">${p.file_name} ${typeBadge}</div>
             </td>
             <td class="py-3 px-2">
               <div class="font-medium">${p.title}</div>
@@ -350,53 +357,201 @@
       });
     }
 
-    // ÖN-UÇUŞ DENETÇİSİ + THUMBNAIL EŞLEŞTİRME + KLASÖR TARAMA
+    // TÜRKÇE NORMALİZASYON & CAROUSEL SLAYT SIRALAMA (Kapak = 1. resim, Mesaj = 2. resim)
+    function normalizeTr(str) {
+      return String(str || '')
+        .toLowerCase()
+        .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
+        .replace(/ı/g, 'i').replace(/İ/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c');
+    }
+
+    function getSlideRoleRank(fileName) {
+      const base = normalizeTr(fileName.replace(/\.[^/.]+$/, ''));
+      if (/(^|[_\-\s.])(kapak|cover|thumb|thumbnail)([_\-\s.\d]|$)/.test(base)) return 0;
+      if (/(^|[_\-\s.])(mesaj|message|icerik|metin|body|slide2)([_\-\s.\d]|$)/.test(base)) return 1;
+      return 2;
+    }
+
+    function sortCarouselImages(imgs) {
+      return [...imgs].sort((a, b) => {
+        const ra = getSlideRoleRank(a.name);
+        const rb = getSlideRoleRank(b.name);
+        if (ra !== rb) return ra - rb;
+        return a.name.localeCompare(b.name, 'tr', { numeric: true, sensitivity: 'base' });
+      });
+    }
+
+    function extractCarouselGroupKey(fileName) {
+      const noExt = fileName.replace(/\.[^/.]+$/, '');
+      const norm = normalizeTr(noExt);
+      const stripped = norm.replace(/[_\-\s.]+(kapak|cover|mesaj|message|icerik|metin|body|slide\d*|\d+)$/, '');
+      return stripped || norm;
+    }
+
+    function swapCarouselSlides(idx) {
+      const item = scannedQueue[idx];
+      if (!item || !item.carousel_items || item.carousel_items.length < 2) return;
+      item.carousel_items.reverse();
+      const box = document.getElementById(`slides-preview-${idx}`);
+      if (box) {
+        box.innerHTML = item.carousel_items
+          .map((s, k) => `<div class="text-[11px] text-slate-300">${k + 1}. ${s.file_name}</div>`)
+          .join('');
+      }
+    }
+
+    // ÖN-UÇUŞ DENETÇİSİ + ALT KLASÖR CAROUSEL + KAPAK/MESAJ EŞLEŞTİRME + KLASÖR TARAMA
     async function scanAllGroupFolders() {
       const container = document.getElementById('unscheduled-list');
-      container.innerHTML = '<p class="text-sm text-sky-400 text-center py-6">Grup klasörleri taranıyor ve dosyalar denetleniyor...</p>';
+      container.innerHTML = '<p class="text-sm text-sky-400 text-center py-6">Grup klasörleri ve alt klasörler taranıyor...</p>';
       scannedQueue = [];
 
       for (const group of channelGroups) {
-        const q = encodeURIComponent(`'${group.drive_folder_id}' in parents and (mimeType contains 'video/' or mimeType contains 'image/') and trashed = false`);
+        const q = encodeURIComponent(`'${group.drive_folder_id}' in parents and (mimeType = 'application/vnd.google-apps.folder' or mimeType contains 'video/' or mimeType contains 'image/') and trashed = false`);
         const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=name&fields=files(id,name,mimeType,size)&key=${CONFIG.GOOGLE_API_KEY}`).then(r => r.json());
-        const files = res.files || [];
+        const entries = res.files || [];
 
-        // Aynı isimdeki .jpg dosyalarını YouTube Thumbnail olarak haritala
-        const thumbMap = {};
-        files.forEach(f => {
-          if (f.mimeType === 'image/jpeg' || f.name.toLowerCase().endsWith('.jpg')) {
-            const base = f.name.replace(/\.[^/.]+$/, "").toLowerCase();
-            thumbMap[base] = f.id;
+        const subfolders = entries.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+        const videos = entries.filter(f => f.mimeType.startsWith('video/'));
+        const images = entries.filter(f => f.mimeType.startsWith('image/'));
+
+        // 1) ALT KLASÖRLER (Örn: Sıradakiler > A Grubu > 1 / [kapak.png, mesaj.png] veya video + kapak)
+        for (const sub of subfolders) {
+          if (existingFileIds.has(sub.id)) continue;
+          const sq = encodeURIComponent(`'${sub.id}' in parents and (mimeType contains 'video/' or mimeType contains 'image/') and trashed = false`);
+          const sres = await fetch(`https://www.googleapis.com/drive/v3/files?q=${sq}&orderBy=name&fields=files(id,name,mimeType,size)&key=${CONFIG.GOOGLE_API_KEY}`).then(r => r.json());
+          const subFiles = sres.files || [];
+          const subVideos = subFiles.filter(f => f.mimeType.startsWith('video/'));
+          const subImages = subFiles.filter(f => f.mimeType.startsWith('image/'));
+
+          if (subImages.length >= 2 && subVideos.length === 0) {
+            const ordered = sortCarouselImages(subImages).slice(0, 10);
+            if (ordered.some(f => existingFileIds.has(f.id))) continue;
+            const infos = [];
+            if (ordered.some(f => f.mimeType !== 'image/jpeg')) {
+              infos.push("🔄 PNG/WebP slaytlar paylaşımda otomatik JPEG'e çevrilir");
+            }
+            scannedQueue.push({
+              group,
+              file_id: sub.id,
+              drive_subfolder_id: sub.id,
+              file_name: sub.name,
+              media_type: 'carousel',
+              thumbnail_file_id: null,
+              carousel_items: ordered.map(f => ({ file_id: f.id, file_name: f.name, mime_type: f.mimeType })),
+              warnings: [],
+              infos
+            });
+          } else if (subVideos.length >= 1) {
+            const vid = subVideos[0];
+            if (existingFileIds.has(vid.id)) continue;
+            const thumb = subImages.length >= 1 ? sortCarouselImages(subImages)[0] : null;
+            const warnings = [];
+            const sizeMB = vid.size ? (parseInt(vid.size, 10) / (1024 * 1024)) : 0;
+            if (sizeMB > 95) warnings.push(`⚠️ Dosya boyutu yüksek (${sizeMB.toFixed(1)} MB)`);
+            scannedQueue.push({
+              group,
+              file_id: vid.id,
+              drive_subfolder_id: sub.id,
+              file_name: vid.name,
+              media_type: 'video',
+              thumbnail_file_id: thumb ? thumb.id : null,
+              carousel_items: [],
+              warnings,
+              infos: [`📁 Alt klasör: ${sub.name}`]
+            });
+          } else if (subImages.length === 1) {
+            const img = subImages[0];
+            if (existingFileIds.has(img.id)) continue;
+            const infos = [`📁 Alt klasör: ${sub.name}`];
+            if (img.mimeType !== 'image/jpeg') infos.push("🔄 PNG/WebP otomatik JPEG'e çevrilir");
+            scannedQueue.push({
+              group,
+              file_id: img.id,
+              drive_subfolder_id: sub.id,
+              file_name: img.name,
+              media_type: 'image',
+              thumbnail_file_id: null,
+              carousel_items: [],
+              warnings: [],
+              infos
+            });
           }
-        });
+        }
 
-        files.forEach(file => {
-          if (existingFileIds.has(file.id)) return;
-          const isVideo = file.mimeType.startsWith('video/');
-          const baseName = file.name.replace(/\.[^/.]+$/, "").toLowerCase();
+        // 2) GRUP KLASÖRÜNDE DOĞRUDAN VİDEOLAR (Örn: Sıradakiler > A Grubu > 1.mp4 + opsiyonel 1.jpg / 1_kapak.jpg)
+        const usedImageIds = new Set();
+        videos.forEach(vid => {
+          const vBase = normalizeTr(vid.name.replace(/\.[^/.]+$/, ''));
+          const matchedThumb = images.find(img => {
+            const iBase = normalizeTr(img.name.replace(/\.[^/.]+$/, ''));
+            return iBase === vBase || iBase === `${vBase}_kapak` || iBase === `${vBase}_thumb` || iBase === `${vBase}_cover` || iBase === `${vBase}-kapak`;
+          });
+          if (matchedThumb) usedImageIds.add(matchedThumb.id);
+          if (existingFileIds.has(vid.id)) return;
 
-          // Eğer bu dosya bir videonun kapağı (thumbnail) ise ayrı bir gönderi olarak listeleme
-          const hasMatchingVideo = !isVideo && files.some(v => v.mimeType.startsWith('video/') && v.name.replace(/\.[^/.]+$/, "").toLowerCase() === baseName);
-          if (hasMatchingVideo) return;
-
-          // Ön-Uçuş (Pre-Flight) Hata Denetimi
           const warnings = [];
-          const sizeMB = file.size ? (parseInt(file.size, 10) / (1024 * 1024)) : 0;
-          if (!isVideo && file.mimeType !== 'image/jpeg') {
-            warnings.push("⚠️ Instagram sadece JPEG kabul eder (PNG hata verir)");
-          }
-          if (isVideo && sizeMB > 95) {
-            warnings.push(`⚠️ Dosya boyutu yüksek (${sizeMB.toFixed(1)} MB)`);
-          }
+          const sizeMB = vid.size ? (parseInt(vid.size, 10) / (1024 * 1024)) : 0;
+          if (sizeMB > 95) warnings.push(`⚠️ Dosya boyutu yüksek (${sizeMB.toFixed(1)} MB)`);
 
           scannedQueue.push({
             group,
-            file_id: file.id,
-            file_name: file.name,
-            media_type: isVideo ? 'video' : 'image',
-            thumbnail_file_id: isVideo ? (thumbMap[baseName] || null) : null,
-            warnings
+            file_id: vid.id,
+            drive_subfolder_id: null,
+            file_name: vid.name,
+            media_type: 'video',
+            thumbnail_file_id: matchedThumb ? matchedThumb.id : null,
+            carousel_items: [],
+            warnings,
+            infos: []
           });
+        });
+
+        // 3) GRUP KLASÖRÜNDE DOĞRUDAN GÖRSELLER (Aynı isimli kapak+mesaj -> Carousel, tek başına -> Fotoğraf)
+        const imageGroups = {};
+        images.forEach(img => {
+          if (usedImageIds.has(img.id) || existingFileIds.has(img.id)) return;
+          const key = extractCarouselGroupKey(img.name);
+          if (!imageGroups[key]) imageGroups[key] = [];
+          imageGroups[key].push(img);
+        });
+
+        Object.entries(imageGroups).forEach(([key, grpImgs]) => {
+          if (grpImgs.length >= 2) {
+            const ordered = sortCarouselImages(grpImgs).slice(0, 10);
+            const infos = [];
+            if (ordered.some(f => f.mimeType !== 'image/jpeg')) {
+              infos.push("🔄 PNG/WebP slaytlar paylaşımda otomatik JPEG'e çevrilir");
+            }
+            scannedQueue.push({
+              group,
+              file_id: ordered[0].id,
+              drive_subfolder_id: null,
+              file_name: `${key} (Carousel)`,
+              media_type: 'carousel',
+              thumbnail_file_id: null,
+              carousel_items: ordered.map(f => ({ file_id: f.id, file_name: f.name, mime_type: f.mimeType })),
+              warnings: [],
+              infos
+            });
+          } else {
+            const img = grpImgs[0];
+            const infos = [];
+            if (img.mimeType !== 'image/jpeg') {
+              infos.push("🔄 PNG/WebP paylaşımda otomatik JPEG'e çevrilir");
+            }
+            scannedQueue.push({
+              group,
+              file_id: img.id,
+              drive_subfolder_id: null,
+              file_name: img.name,
+              media_type: 'image',
+              thumbnail_file_id: null,
+              carousel_items: [],
+              warnings: [],
+              infos
+            });
+          }
         });
       }
 
@@ -410,17 +565,35 @@
       document.getElementById('bulk-save-footer').classList.remove('hidden');
 
       scannedQueue.forEach((item, i) => {
-        const cleanTitle = item.file_name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+        const cleanTitle = item.file_name.replace(/ \(Carousel\)$/, '').replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
         const isVid = item.media_type === 'video';
-        const warningBadges = item.warnings.map(w => `<div class="text-[11px] bg-rose-950 border border-rose-800 text-rose-300 px-2 py-0.5 rounded mt-1">${w}</div>`).join('');
+        const isCarousel = item.media_type === 'carousel';
+        const warningBadges = (item.warnings || []).map(w => `<div class="text-[11px] bg-rose-950 border border-rose-800 text-rose-300 px-2 py-0.5 rounded mt-1">${w}</div>`).join('');
+        const infoBadges = (item.infos || []).map(info => `<div class="text-[11px] bg-teal-950/70 border border-teal-800 text-teal-300 px-2 py-0.5 rounded mt-1">${info}</div>`).join('');
+        const carouselPreview = isCarousel ? `
+          <div class="mt-2 bg-slate-900 border border-slate-800 rounded-lg p-2 space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="text-[10px] font-semibold text-fuchsia-300">🎠 Carousel Slayt Sırası (${item.carousel_items.length} resim)</span>
+              <button type="button" onclick="swapCarouselSlides(${i})" class="text-[10px] text-sky-400 hover:underline">⇄ Sırayı Çevir</button>
+            </div>
+            <div id="slides-preview-${i}">
+              ${item.carousel_items.map((s, k) => `<div class="text-[11px] text-slate-300">${k + 1}. ${s.file_name}</div>`).join('')}
+            </div>
+          </div>
+        ` : '';
 
         container.innerHTML += `
           <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl grid grid-cols-1 lg:grid-cols-12 gap-4 items-start queue-row" data-idx="${i}">
             <!-- Dosya & Uyarılar -->
             <div class="lg:col-span-3 space-y-1">
-              <span class="text-xs font-bold bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded">${item.group.group_name}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-xs font-bold bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded">${item.group.group_name}</span>
+                ${isCarousel ? '<span class="text-[10px] font-bold bg-fuchsia-950 text-fuchsia-300 px-2 py-0.5 rounded">CAROUSEL</span>' : ''}
+              </div>
               <div class="text-sm font-medium break-all">${item.file_name}</div>
               ${item.thumbnail_file_id ? '<div class="text-[11px] text-emerald-400">🖼️ Özel YT Kapak Fotoğrafı Eşleşti</div>' : ''}
+              ${carouselPreview}
+              ${infoBadges}
               ${warningBadges}
               <div class="pt-2 grid grid-cols-2 gap-1.5">
                 <div>
@@ -434,7 +607,8 @@
                   <label class="block text-[10px] text-slate-400">Instagram Format</label>
                   <select class="q-ig-fmt w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs">
                     ${isVid && item.group.ig_connected ? '<option value="reels">Reels</option><option value="post">Video Gönderi</option>' : ''}
-                    ${!isVid && item.group.ig_connected ? '<option value="post">Fotoğraf Gönderi</option>' : ''}
+                    ${isCarousel && item.group.ig_connected ? '<option value="carousel" selected>Carousel (Sıralı)</option>' : ''}
+                    ${!isVid && !isCarousel && item.group.ig_connected ? '<option value="post">Fotoğraf Gönderi</option>' : ''}
                     <option value="none" ${!item.group.ig_connected ? 'selected' : ''}>Yükleme</option>
                   </select>
                 </div>
@@ -454,7 +628,7 @@
               <textarea oninput="updateCounters(${i})" class="q-desc-${i} w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs" rows="2" placeholder="Açıklama ve #etiketler (İlk 125 karakter kanca alanıdır)..."></textarea>
               <div class="text-[10px] text-slate-400 text-right" id="desc-cnt-${i}">0 / 2200 karakter</div>
 
-              <input type="text" class="q-comment-${i} w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1 text-xs" placeholder="💬 İlk Yorum (Video yayınlandığı an otomatik yorum atar - opsiyonel)" />
+              <input type="text" class="q-comment-${i} w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1 text-xs" placeholder="💬 İlk Yorum (Gönderi yayınlandığı an otomatik yorum atar - opsiyonel)" />
             </div>
 
             <!-- Tarih -->
@@ -550,6 +724,7 @@
         if (title && dateVal && (ytFmt !== 'none' || igFmt !== 'none')) {
           payload.push({
             drive_file_id: item.file_id,
+            drive_subfolder_id: item.drive_subfolder_id || null,
             group_id: item.group.id,
             folder_name: item.group.drive_folder_name,
             file_name: item.file_name,
@@ -557,6 +732,7 @@
             yt_format: ytFmt,
             ig_format: igFmt,
             thumbnail_file_id: item.thumbnail_file_id,
+            carousel_items: item.carousel_items || [],
             title,
             description,
             first_comment: firstComment,
@@ -727,13 +903,12 @@
     }
 
     async function triggerGitHubAction() {
-      if (!CONFIG.GITHUB_PAT) return alert("CONFIG.GITHUB_PAT tanımlı değil.");
-      const res = await fetch(`https://api.github.com/repos/${CONFIG.GITHUB_REPO}/actions/workflows/publisher.yml/dispatches`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${CONFIG.GITHUB_PAT}`, 'Accept': 'application/vnd.github+json' },
-        body: JSON.stringify({ ref: 'main' })
-      });
-      if (res.ok) alert("⚡ Motor tetiklendi!");
+      try {
+        await callEdgeFunction({ action: 'trigger_workflow', run_advisor: false });
+        alert("⚡ Motor tetiklendi! GitHub Actions birkaç saniye içinde başlayacak.");
+      } catch (e) {
+        alert("Tetikleme Hatası: " + e.message);
+      }
     }
 
     initializeAuthAndApp();
